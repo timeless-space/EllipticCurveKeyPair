@@ -46,10 +46,10 @@ public enum EllipticCurveKeyPair {
         public var operationPrompt: String?
         
         // The access control used to manage the access to the public key
-        public var publicKeyAccessControl: AccessControl
+        public var publicKeyAccessControl: AccessControl?
         
         // The access control used to manage the access to the private key
-        public var privateKeyAccessControl: AccessControl
+        public var privateKeyAccessControl: AccessControl?
         
         // The access group e.g. "BBDV3R8HVV.no.agens.demo"
         // Useful for shared keychain items
@@ -64,9 +64,9 @@ public enum EllipticCurveKeyPair {
         
         public init(publicLabel: String,
                     privateLabel: String,
-                    operationPrompt: String?,
-                    publicKeyAccessControl: AccessControl,
-                    privateKeyAccessControl: AccessControl,
+                    operationPrompt: String? = nil,
+                    publicKeyAccessControl: AccessControl? = nil,
+                    privateKeyAccessControl: AccessControl? = nil,
                     publicKeyAccessGroup: String? = nil,
                     privateKeyAccessGroup: String? = nil,
                     token: Token) {
@@ -134,7 +134,8 @@ public enum EllipticCurveKeyPair {
                 cachedPrivateKey = key
                 return key
             } catch EllipticCurveKeyPair.Error.underlying(_, let underlying) where underlying.code == errSecItemNotFound {
-                if config.publicKeyAccessControl.flags.contains(.privateKeyUsage) == false, (try? helper.getPublicKey()) != nil {
+                if let publicKeyAccessControl = config.publicKeyAccessControl,
+                    publicKeyAccessControl.flags.contains(.privateKeyUsage) == false, (try? helper.getPublicKey()) != nil {
                     throw Error.probablyAuthenticationError(underlying: underlying)
                 }
                 let keys = try helper.generateKeyPair(context: nil)
@@ -444,14 +445,16 @@ public enum EllipticCurveKeyPair {
                 }
                 privateKeyParams[kSecUseAuthenticationContext as String] = context
             }
-            
-            // On iOS 11 and lower: access control with empty flags doesn't work
-            if !config.privateKeyAccessControl.flags.isEmpty {
-                privateKeyParams[kSecAttrAccessControl as String] = try config.privateKeyAccessControl.underlying()
-            } else {
-                privateKeyParams[kSecAttrAccessible as String] = config.privateKeyAccessControl.protection
+
+            if let privateKeyAccessControl = config.privateKeyAccessControl {
+                // On iOS 11 and lower: access control with empty flags doesn't work
+                if !privateKeyAccessControl.flags.isEmpty {
+                    privateKeyParams[kSecAttrAccessControl as String] = try privateKeyAccessControl.underlying()
+                } else {
+                    privateKeyParams[kSecAttrAccessible as String] = privateKeyAccessControl.protection
+                }
             }
-            
+
             /* ========= public ========= */
             var publicKeyParams: [String: Any] = [
                 kSecAttrLabel as String: config.publicLabel,
@@ -459,14 +462,16 @@ public enum EllipticCurveKeyPair {
             if let publicKeyAccessGroup = config.publicKeyAccessGroup {
                 publicKeyParams[kSecAttrAccessGroup as String] = publicKeyAccessGroup
             }
-            
-            // On iOS 11 and lower: access control with empty flags doesn't work
-            if !config.publicKeyAccessControl.flags.isEmpty {
-                publicKeyParams[kSecAttrAccessControl as String] = try config.publicKeyAccessControl.underlying()
-            } else {
-                publicKeyParams[kSecAttrAccessible as String] = config.publicKeyAccessControl.protection
+
+            if let publicKeyAccessControl = config.publicKeyAccessControl {
+                // On iOS 11 and lower: access control with empty flags doesn't work
+                if !publicKeyAccessControl.flags.isEmpty {
+                    publicKeyParams[kSecAttrAccessControl as String] = try publicKeyAccessControl.underlying()
+                } else {
+                    publicKeyParams[kSecAttrAccessible as String] = publicKeyAccessControl.protection
+                }
             }
-            
+
             /* ========= combined ========= */
             var params: [String: Any] = [
                 kSecAttrKeyType as String: Constants.attrKeyTypeEllipticCurve,
